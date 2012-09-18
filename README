@@ -9,3 +9,4 @@ Copy/paste it WORKING_DIR/.repo/local_manifest.xml
   <project path="kernel/lge/msm7x27" name="lgics/lge-kernel-msm7x27" remote="github" revision="ics" />
   <project path="vendor/lge" name="lgics/cm_vendor_lge" remote="github" revision="master" />
 </manifest>
+
