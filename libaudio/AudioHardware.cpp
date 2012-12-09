@@ -56,7 +56,7 @@ namespace android_audio_legacy {
 static int audpre_index, tx_iir_index;
 static void * acoustic;
 const uint32_t AudioHardware::inputSamplingRates[] = {
-        8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000
+        8000, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 96000
 };
 
 static int get_audpp_filter(void);
@@ -622,7 +622,7 @@ int check_and_set_audpp_parameters(char *buf, int size)
             if (!(p = strtok(NULL, seps)))
                 goto token_err;
 
-            eq_cal(eq[i].gain, eq[i].freq, 48000, eq[i].type, eq[i].qf, (int32_t*)numerator, (int32_t *)denominator, shift);
+            eq_cal(eq[i].gain, eq[i].freq, 96000, eq[i].type, eq[i].qf, (int32_t*)numerator, (int32_t *)denominator, shift);
             for (j = 0; j < 6; j++) {
                 eqalizer[device_id].params[ ( i * 6) + j] = numerator[j];
             }
@@ -926,6 +926,66 @@ static int get_audpp_filter(void)
     return 0;
 }
 
+static int get_srs_filter(void)
+{
+    struct stat st;
+    char *read_buf;
+    char *next_str, *current_str;
+    int csvfd;
+
+    LOGI("get_srs_filter");
+    static const char *const path =
+        "/system/etc/SRSAudioFilter.csv";
+    csvfd = open(path, O_RDONLY);
+    if (csvfd < 0) {
+        /* failed to open normal acoustic file ... */
+        LOGE("failed to open SRS_FX_FILTER %s: %s (%d).",
+             path, strerror(errno), errno);
+        return -1;
+    } else LOGI("open %s success.", path);
+
+    if (fstat(csvfd, &st) < 0) {
+        LOGE("failed to stat %s: %s (%d).",
+             path, strerror(errno), errno);
+        close(csvfd);
+        return -1;
+    }
+
+    read_buf = (char *) mmap(0, st.st_size,
+                    PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE,
+                    csvfd, 0);
+
+    if (read_buf == MAP_FAILED) {
+        LOGE("failed to mmap parameters file: %s (%d)",
+             strerror(errno), errno);
+        close(csvfd);
+        return -1;
+    }
+
+    current_str = read_buf;
+
+    while (1) {
+        int len;
+        next_str = strchr(current_str, '\n');
+        if (!next_str)
+           break;
+        len = next_str - current_str;
+        *next_str++ = '\0';
+        if (check_and_set_audpp_parameters(current_str, len)) {
+            LOGI("failed to set srs parameters, exiting.");
+            munmap(read_buf, st.st_size);
+            close(csvfd);
+            return -1;
+        }
+        current_str = next_str;
+    }
+
+    munmap(read_buf, st.st_size);
+    close(csvfd);
+    return 0;
+}
+
 static int msm72xx_enable_postproc(bool state)
 {
     int fd;
@@ -1074,6 +1134,7 @@ static int msm72xx_enable_postproc(bool state)
 static unsigned calculate_audpre_table_index(unsigned index)
 {
     switch (index) {
+	case 96000:    return SAMP_RATE_INDX_48000;
         case 48000:    return SAMP_RATE_INDX_48000;
         case 44100:    return SAMP_RATE_INDX_44100;
         case 32000:    return SAMP_RATE_INDX_32000;
